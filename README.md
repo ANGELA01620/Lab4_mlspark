@@ -1,30 +1,93 @@
-# Lab 3: Cluster Spark & Lakehouse
+# Taller 3: Spark & Arquitectura Medallion
 
-Este proyecto despliega un cluster Spark completo (Master, Worker, Jupyter Driver) usando Docker y simula un flujo de datos Lakehouse (Bronce -> Plata -> Oro) con Delta Lake.
+Este taller práctico forma parte del **Módulo 3: Spark** y se centra en la implementación del **Capítulo 11: Arquitectura Medallion**.
+El objetivo es simular un flujo de datos real (Lakehouse) y resolver un reto de ingeniería de datos: la implementación de una **Puerta de Calidad (Quality Gate)**.
 
-## Requisitos
-- Docker y Docker Compose instalados.
+## 🎯 Objetivos del Taller
 
-## Instrucciones
+1. **Infraestructura:** Desplegar un clúster Spark completo (Master, Worker, Jupyter) usando Docker.
+2. **Arquitectura:** Construir un pipeline de datos con capas **Bronce** (Crudo), **Plata** (Limpio) y **Oro** (Agregado).
+3. **RETO (Quality Gate):** Modificar el flujo para detectar datos corruptos y desviarlos a una zona de **Cuarentena** en lugar de eliminarlos.
 
-1. **Levantar el Cluster**:
-   \`\`\`bash
-   docker-compose up --build -d
-   \`\`\`
+## 🛠️ Prerrequisitos
 
-2. **Acceder a Jupyter Lab**:
-   - Abre tu navegador en: [http://localhost:8888](http://localhost:8888)
-   - No requiere token.
+* Docker Desktop instalado y corriendo.
+* Git (opcional, para clonar el repo).
 
-3. **Monitorizar Spark**:
-   - Spark Master UI: [http://localhost:8080](http://localhost:8080)
+---
 
-4. **Ejecutar el Pipeline**:
-   Dentro de Jupyter, navega a la carpeta \`notebooks\` y ejecuta los scripts en orden:
-   1. \`01_ingest.py\`: Convierte el CSV a Delta Lake (Bronce).
-   2. \`02_transform.py\`: Limpia los datos (Plata).
-   3. \`03_analytics.py\`: Agrega datos por departamento (Oro).
+## 🚀 Guía Paso a Paso
 
-## Estructura
-- \`data/\`: Contiene el CSV de entrada y la carpeta \`lakehouse\` donde se guardarán los datos Delta.
-- \`notebooks/\`: Scripts de PySpark.
+### 1. Despliegue del Cluster
+
+Levanta los servicios definidos en el `docker-compose.yml`:
+
+```bash
+docker-compose up --build -d
+
+```
+
+Verifica que los contenedores estén activos:
+
+* **Jupyter Lab (Tu entorno de trabajo):** [http://localhost:8888](https://www.google.com/search?q=http://localhost:8888)
+* **Spark Master UI (Monitorización):** [http://localhost:8080](https://www.google.com/search?q=http://localhost:8080)
+
+### 2. Ingesta (Capa Bronce)
+
+El primer paso es convertir los datos crudos a un formato optimizado (Delta Lake).
+
+* Entra a Jupyter y abre `notebooks/01_ingest.py`.
+* **Acción:** Ejecuta el script.
+* **Resultado esperado:** Se creará la tabla Delta en `data/lakehouse/bronze/secop`.
+
+### 3. 🔥 EL RETO: Transformación y Quality Gate (Capa Plata)
+
+Aquí aplicarás los conceptos del Capítulo 11. El script original `02_transform.py` simplemente borra los datos malos, lo cual es una mala práctica en auditoría.
+
+**Tu Misión:**
+Modificar `02_transform.py` para implementar una lógica de bifurcación (split):
+
+1. **Reglas de Calidad:**
+* `Precio Base` debe ser mayor a 0.
+* `Fecha de Firma` no puede ser nula.
+
+
+2. **Ruteo de Datos:**
+* ✅ **Registros Válidos:** Guardarlos en la tabla `silver/secop`.
+* ❌ **Registros Inválidos:** Guardarlos en una nueva tabla `quarantine/secop_errors`, agregando una columna `motivo_rechazo`.
+
+
+
+> *Pista: Utiliza funciones como `when().otherwise()` y filtros inversos (`~`) para separar los DataFrames.*
+
+### 4. Analítica de Negocio (Capa Oro)
+
+Con los datos saneados en la capa Plata, generaremos valor para el negocio.
+
+* Abre y ejecuta `notebooks/03_analytics.py`.
+* **Resultado:** Se generará una tabla agregada en `data/lakehouse/gold/top_deptos` mostrando la inversión por departamento.
+
+---
+
+## 📂 Estructura del Lakehouse
+
+El taller generará la siguiente estructura de carpetas en `data/lakehouse/`:
+
+| Capa | Ruta | Descripción | Formato |
+| --- | --- | --- | --- |
+| **Bronce** | `/bronze/secop` | Copia fiel del CSV original (Raw). | Delta |
+| **Plata** | `/silver/secop` | Datos limpios, tipados y validados. | Delta |
+| **Cuarentena** | `/quarantine/secop_errors` | Datos corruptos para auditoría (Resultado del Reto). | Delta |
+| **Oro** | `/gold/top_deptos` | Agregaciones listas para reportes/dashboards. | Delta |
+
+---
+
+## 🧹 Limpieza
+
+Para detener y borrar todo (incluyendo los datos generados):
+
+```bash
+docker-compose down
+# Opcional: borrar la carpeta data/lakehouse manualmente para reiniciar el taller
+
+```
