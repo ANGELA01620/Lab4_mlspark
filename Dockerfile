@@ -1,31 +1,33 @@
-# 1. Empezamos con un Linux mínimo con Python
+# Proyecto Final MLSpark - Imagen Base
 FROM python:3.11-slim
 
-# 2. Instalar Java (REQUISITO CRÍTICO)
-# Spark corre sobre la JVM (Scala). PySpark necesita Java para funcionar.
+# Instalar Java (Requerido por Spark)
 RUN apt-get update && \
-    apt-get install -y default-jdk procps curl && \
-    apt-get clean
+    apt-get install -y default-jdk procps curl wget && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
-# 3. Configurar Variables de Entorno
+# Variables de Entorno
 ENV JAVA_HOME=/usr/lib/jvm/default-java
 ENV SPARK_VERSION=3.5.0
 ENV SPARK_HOME=/opt/spark
-ENV PATH=$PATH:$SPARK_HOME/bin
+ENV PATH=$PATH:$SPARK_HOME/bin:$SPARK_HOME/sbin
+ENV PYTHONPATH=$SPARK_HOME/python:$SPARK_HOME/python/lib/py4j-0.10.9.7-src.zip:$PYTHONPATH
 
-# 4. Descargar e instalar Binarios de Spark
-# Bajamos Spark compilado para Hadoop 3
+# Descargar e instalar Apache Spark
 RUN curl -O https://archive.apache.org/dist/spark/spark-${SPARK_VERSION}/spark-${SPARK_VERSION}-bin-hadoop3.tgz && \
     tar xvf spark-${SPARK_VERSION}-bin-hadoop3.tgz && \
     mv spark-${SPARK_VERSION}-bin-hadoop3 /opt/spark && \
     rm spark-${SPARK_VERSION}-bin-hadoop3.tgz
 
-# 5. Instalar librerías de Python
-# delta-spark: Permite usar el formato Delta Lake
-# jupyterlab: Nuestro entorno de desarrollo (Driver)
-RUN pip install pyspark==${SPARK_VERSION} delta-spark==3.0.0 pandas jupyterlab
+# Copiar requirements.txt e instalar dependencias
+COPY requirements.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.txt
 
-WORKDIR /app
+# Crear directorios de trabajo
+RUN mkdir -p /opt/spark-data /opt/spark-notebooks /opt/spark-apps /opt/mlflow/mlruns
 
-# Por defecto, el contenedor intentará lanzar Jupyter.
+WORKDIR /opt/spark-notebooks
+
+# Comando por defecto (Jupyter Lab)
 CMD ["jupyter", "lab", "--ip=0.0.0.0", "--allow-root", "--no-browser", "--NotebookApp.token=''"]
