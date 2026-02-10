@@ -46,7 +46,7 @@ services:
     container_name: jupyter-lab
     hostname: jupyter
     ports:
-      - "8888:8888"  # Jupyter Lab
+      - "8989:8888"  # Jupyter Lab
       - "4040:4040"  # Spark Application UI
     depends_on:
       - spark-master
