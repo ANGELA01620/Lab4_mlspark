@@ -132,6 +132,9 @@ null_df = null_df.sort_values('null_count', ascending=False)
 print(null_df[null_df['null_count'] > 0])
 
 # %%
+
+
+
 # ============================================================
 # ANÁLISIS VALOR DEL CONTRATO
 # ============================================================
@@ -186,6 +189,52 @@ if tipo_cols:
         .count() \
         .orderBy(desc("count")) \
         .show(20, truncate=False)
+
+# %%
+# ============================================================
+# VISUALIZACIÓN TOP 10 ENTIDADES POR VALOR TOTAL
+# ============================================================
+
+from pyspark.sql.functions import sum as spark_sum, desc
+import matplotlib.pyplot as plt
+
+entidad_col = "nombre_entidad"
+valor_col = "valor_del_contrato"
+
+# Agrupar por entidad y ordenar por valor total
+df_ent = df.groupBy(entidad_col) \
+    .agg(
+        spark_sum(valor_col).alias("valor_total")
+    ) \
+    .orderBy(desc("valor_total")) \
+    .limit(10)
+
+# Convertir a pandas para visualización
+df_ent_pandas = df_ent.toPandas()
+
+# Crear gráfica
+plt.figure(figsize=(10, 6))
+
+plt.barh(
+    df_ent_pandas[entidad_col],
+    df_ent_pandas['valor_total'] / 1e9  # convertir a miles de millones
+)
+
+plt.xlabel('Valor Total (Miles de Millones COP)')
+plt.title('Top 10 Entidades por Valor Total Contratado')
+plt.gca().invert_yaxis()
+
+plt.tight_layout()
+plt.show()
+
+# Guardar imagen
+plt.savefig(
+    '/opt/spark-data/processed/eda_top10_entidades_valor.png',
+    dpi=150,
+    bbox_inches='tight'
+)
+
+print("\nGráfico guardado: /opt/spark-data/processed/eda_top10_entidades_valor.png")
 
 # %%
 # ============================================================
