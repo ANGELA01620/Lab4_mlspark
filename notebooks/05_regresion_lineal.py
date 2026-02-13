@@ -194,137 +194,174 @@ print("="*60)
 
 spark.stop()
 
-# Respuesta reto 1:
-# Se utilizó una división 70/30 (70% entrenamiento, 30% prueba),
-# ya que representa un balance clásico entre capacidad de aprendizaje
-# del modelo y validación robusta.
-#
-# Con 132,641 registros, el conjunto de entrenamiento (92,851)
-# es suficientemente grande para capturar patrones,
-# mientras que el conjunto de prueba (39,790) permite
-# una evaluación estadísticamente estable.
-#
-# Si el dataset tuviera 1 millón de registros,
-# podría utilizarse 80/20 o incluso 90/10,
-# ya que el conjunto de test seguiría siendo grande.
-#
-# Si el dataset tuviera solo 1,000 registros,
-# sería más recomendable usar validación cruzada
-# para evitar alta varianza en la evaluación.
-#
-# Es importante usar seed=42 para garantizar reproducibilidad,
-# es decir, que la partición sea exactamente la misma
-# en cada ejecución del experimento.
+#  RETO 1: Proporción Train vs Test
 
-# Reto 2:
-# Se configuró un modelo baseline sin regularización (regParam=0.0)
-# con el objetivo de evaluar primero el comportamiento lineal puro.
-#
-# maxIter=100 es suficiente dado que el optimizador
-# convergió inmediatamente (0 iteraciones),
-# lo que indica que el problema se resolvió
-# mediante solución analítica cerrada.
-#
-# Este modelo sirve como punto de comparación
-# antes de aplicar regularización en el Notebook 07.
+# Seleccionamos la opción B) 70/30 – Balance clásico.
 
-# Reto 3 R² significa:
-# El coeficiente de determinación R² representa
-# la proporción de la varianza del valor del contrato
-# que es explicada por el modelo.
-#
-# No representa porcentaje de precisión.
-#
-# En este caso:
+# Utilizamos una división 70% entrenamiento y 30% prueba porque representa
+# un equilibrio adecuado entre capacidad de aprendizaje y validación robusta.
+# Con 132,641 registros, el conjunto de entrenamiento (92,851) es suficientemente
+# grande para capturar patrones relevantes, mientras que el conjunto de prueba
+# (39,790) permite una evaluación estadísticamente estable y confiable.
+
+# Si tuviéramos 1 millón de registros, podríamos usar 80/20 o incluso 90/10,
+# ya que el conjunto de prueba seguiría siendo lo suficientemente grande
+# para evaluar el modelo con baja varianza.
+
+# Si tuviéramos solo 1,000 registros, sería más recomendable aplicar
+# validación cruzada (k-fold), ya que una división simple podría generar
+# alta variabilidad en los resultados.
+
+# Usar seed=42 garantiza reproducibilidad, es decir,
+# que la partición sea idéntica en cada ejecución.
+
+
+#  RETO 2: Interpretación de R²
+
+# La respuesta correcta es:
+# B) El modelo explica 65% de la varianza en los datos.
+
+# El coeficiente de determinación R² representa la proporción
+# de la variabilidad de la variable objetivo que es explicada por el modelo.
+
+# No representa porcentaje de precisión ni porcentaje de error.
+
+# En nuestro caso:
 # R² Test (log) = 0.1791
-# Esto significa que el modelo explica aproximadamente
-# el 17.9% de la variabilidad del valor del contrato.
-#
-# Reto 4:
-# Se observan errores elevados en contratos de gran magnitud.
-# Esto indica presencia de alta dispersión y contratos outliers.
-#
-# La transformación logarítmica redujo significativamente
-# la explosión numérica observada en la escala original.
-#
-# Los mayores errores tienden a concentrarse en contratos
-# extremadamente grandes, lo cual sugiere que el modelo lineal
-# no captura completamente la dinámica de contratos de alto valor.
-#
-# Reto 5:
-# No se observa overfitting significativo,
-# ya que la diferencia entre R² Train y Test es pequeña (0.0237).
-#
+
+# Esto significa que el modelo explica aproximadamente el 17.9%
+# de la variabilidad del valor del contrato (en escala logarítmica).
+
+# ¿Es 0.65 un buen R²?
+# Depende del contexto:
+
+# En problemas financieros o sociales complejos,
+# un R² de 0.65 puede considerarse bueno.
+
+# En sistemas físicos altamente determinísticos,
+# sería moderado.
+
+# En datasets ruidosos o con alta variabilidad estructural,
+# puede ser un resultado sólido.
+
+# En nuestro caso, el R² (~0.18) indica capacidad explicativa limitada,
+# lo que sugiere que la relación no es estrictamente lineal.
+
+
+#  RETO 5: Comparación Train vs Test
+
+# Escenarios teóricos:
+
+# A) R² train = 0.9, R² test = 0.85
+# No hay overfitting significativo. El modelo generaliza bien.
+
+# B) R² train = 0.6, R² test = 0.58
+# Modelo estable pero posiblemente simple.
+# No hay sobreajuste, puede haber leve underfitting.
+
+# C) R² train = 0.95, R² test = 0.45
+# Existe overfitting severo.
+# El modelo memoriza el entrenamiento y no generaliza.
+
+# Nuestro caso:
+
+# No observamos overfitting significativo,
+# ya que la diferencia entre R² Train y Test es pequeña (~0.0237).
+
 # Tampoco existe sobreajuste severo.
-#
-# Sin embargo, el modelo presenta underfitting leve,
+
+# Sí identificamos underfitting leve,
 # debido a que el R² es bajo (~0.18),
 # lo que indica que el modelo lineal explica
 # una fracción limitada de la varianza.
-#
+
 # Esto sugiere que la relación entre variables
 # podría no ser estrictamente lineal.
 
-# Interpretación:
+
+#  RETO BONUS 1: Residuos
+
+# En un modelo bien ajustado, los residuos deberían:
+
+# Distribuirse aproximadamente de forma normal
+# Estar centrados en cero
+# No presentar patrón sistemático
+
+# En nuestro análisis:
+
+# Los residuos están razonablemente centrados en cero.
+# Existe dispersión consistente con el R² moderado.
+# No se observa sesgo extremo.
+
+# Esto indica que el modelo no sobreestima ni subestima sistemáticamente,
+# aunque su capacidad explicativa es limitada.
+
+
+#  RETO 6: Interpretación de Coeficientes
+
 # Un coeficiente positivo indica que al aumentar esa feature,
 # el valor logarítmico del contrato tiende a aumentar.
-#
+
 # Un coeficiente negativo indica relación inversa.
-#
-# Un coeficiente grande en valor absoluto implica
-# mayor influencia relativa en la predicción.
-#
-# En este modelo, las features 18, 11 y 9
-# muestran mayor impacto en la predicción.
-#
-# Debido a que se utilizó PCA,
+
+# Un coeficiente con mayor valor absoluto implica mayor
+# influencia relativa en la predicción.
+
+# En nuestro modelo, las features 18, 11 y 9
+# muestran mayor impacto relativo.
+
+# Sin embargo, debido al uso de PCA,
 # la interpretación directa es limitada,
 # ya que cada componente principal representa
 # una combinación lineal de variables originales.
 
 
-# Interpretación de residuos:
-# En un modelo bien ajustado,
-# los residuos deberían distribuirse aproximadamente
-# de forma normal y centrados en cero.
-#
-# En este caso, los residuos están razonablemente centrados,
-# aunque presentan cierta dispersión,
-# consistente con el R² moderadamente bajo.
-#
-# No se observa sesgo extremo,
-# lo cual indica que el modelo no sobreestima
-# ni subestima sistemáticamente.
+#  Preguntas 
 
-# Nota:
-# El análisis de feature importance removiendo
-# una feature a la vez es computacionalmente costoso.
-#
-# Dado el tamaño del dataset (132k registros),
-# este experimento podría ejecutarse,
-# pero se recomienda realizarlo únicamente
-# si se requiere análisis interpretativo profundo.
-#
-# Alternativamente, modelos como RandomForest
-# proveen importance de manera nativa.
+# 1️ ¿Por qué usar RMSE en lugar de solo MAE?
 
-
-# 1. ¿Por qué usar RMSE en lugar de solo MAE?
-# RMSE penaliza más los errores grandes,
-# lo que lo hace útil cuando los outliers
+# El RMSE penaliza más los errores grandes
+# debido al término cuadrático.
+# Es útil cuando los errores extremos
 # tienen impacto económico significativo.
 
-# 2. Si todas las predicciones fueran = promedio de labels,
-# el R² sería aproximadamente 0.
+# 2️ Si todas las predicciones fueran iguales
+# al promedio de los labels, ¿cuál sería el R²?
 
-# 3. Preferiría RMSE cuando errores grandes son críticos.
-# Preferiría MAE cuando se busca robustez ante outliers.
+# El R² sería aproximadamente 0,
+# ya que el modelo no estaría explicando
+# variabilidad adicional respecto a la media.
 
-# 4. ¿Cómo mejorar el modelo?
-# - Aplicar regularización (L1, L2 o ElasticNet)
-# - Probar modelos no lineales (RandomForest, GBT)
-# - Realizar ingeniería de features adicional
-# - Detectar y tratar outliers extremos
-# - Ajustar hiperparámetros mediante validación cruzada
+# 3️ ¿Cuándo preferir RMSE vs MAE?
+
+# Preferiríamos:
+
+# RMSE cuando errores grandes son críticos
+# y deben penalizarse más.
+
+# MAE cuando buscamos mayor robustez
+# frente a outliers.
+
+# 4️ ¿Cómo mejorar el modelo?
+
+# Podríamos:
+
+# Aplicar regularización (L1, L2 o ElasticNet).
+# Probar modelos no lineales como RandomForest
+# o Gradient Boosted Trees.
+# Realizar ingeniería de variables adicional.
+# Detectar y tratar outliers extremos.
+# Ajustar hiperparámetros mediante validación cruzada.
+# Incorporar variables categóricas adicionales relevantes.
 
 
+#  Conclusión General
+
+# Nuestro modelo lineal:
+
+# No presenta overfitting significativo.
+# Presenta underfitting leve.
+# Explica una fracción limitada de la varianza.
+# Se beneficia de la transformación logarítmica.
+# Puede mejorarse mediante modelos no lineales
+# o regularización.
