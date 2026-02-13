@@ -1,211 +1,260 @@
 # %% [markdown]
 # # Notebook 02: Análisis Exploratorio de Datos (EDA)
 #
-# Objetivo:
-# - Entender la distribución de variables
-# - Identificar valores nulos
-# - Detectar outliers
-# - Analizar contratos por ENTIDAD
+# **Objetivo**: Entender la distribución de las variables,
+# identificar valores nulos y outliers.
 
-# ==========================================================
-# 1. IMPORTAR LIBRERÍAS
-# ==========================================================
-
+# %%
+# Importar librerías
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import (
-    col, count, sum as spark_sum, avg,
-    min as spark_min, max as spark_max,
-    stddev, isnan, when, desc,
-    to_date, year, month, regexp_replace
+    col, count, sum as spark_sum, avg, min as spark_min,
+    max as spark_max, stddev, isnan, when, isnull, desc,
+    to_timestamp
 )
+from pyspark.sql.types import DoubleType, LongType, IntegerType
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
 
-from pyspark.sql.types import DoubleType, FloatType
-import os
-
-
-# ==========================================================
-# 2. CREAR SPARK SESSION
-# ==========================================================
-
+# %%
+# Configurar Spark
 spark = SparkSession.builder \
-    .appName("SECOP_EDA_CORREGIDO") \
-    .master("local[*]") \
+    .appName("SECOP_EDA") \
+    .master("spark://spark-master:7077") \
+    .config("spark.executor.memory", "2g") \
     .getOrCreate()
 
-spark.sparkContext.setLogLevel("WARN")
+print(f"Spark Version: {spark.version}")
 
-print("Spark Version:", spark.version)
-
-
-# ==========================================================
-# 3. CARGAR DATOS DESDE BRONZE
-# ==========================================================
-
-parquet_path = "/opt/spark-data/bronze/secop_contratos"
-
-print(f"Cargando datos desde: {parquet_path}")
+# %%
+# Cargar datos
+parquet_path = "/opt/spark-data/raw/secop_bogota_2025_q1.parquet"
 
 df = spark.read.parquet(parquet_path)
 
-total_registros = df.count()
-
-print(f"Registros cargados: {total_registros:,}")
+print(f"Registros cargados: {df.count():,}")
 print(f"Columnas: {len(df.columns)}")
 
+print("\n=== ESQUEMA ORIGINAL ===")
 df.printSchema()
 
+# ============================================================
+# CONVERSIÓN DE TIPOS
+# ============================================================
 
-# ==========================================================
-# 4. IDENTIFICAR Y TIPAR CORRECTAMENTE VALOR DEL CONTRATO
-# ==========================================================
+fecha_cols = [
+    "fecha_de_firma",
+    "fecha_de_inicio_del_contrato",
+    "fecha_de_fin_del_contrato",
+    "ultima_actualizacion",
+    "fecha_inicio_liquidacion",
+    "fecha_fin_liquidacion",
+    "fecha_de_notificaci_n_de_prorrogaci_n"
+]
 
-valor_cols = [c for c in df.columns if 'valor' in c.lower()]
+for c in fecha_cols:
+    if c in df.columns:
+        df = df.withColumn(c, to_timestamp(col(c)))
 
-if not valor_cols:
-    raise ValueError("No se encontró columna de valor en el dataset.")
+double_cols = [
+    "valor_del_contrato",
+    "valor_de_pago_adelantado",
+    "valor_facturado",
+    "valor_pendiente_de_pago",
+    "valor_pagado",
+    "valor_amortizado",
+    "valor_pendiente_de",
+    "valor_pendiente_de_ejecucion",
+    "presupuesto_general_de_la_nacion_pgn",
+    "sistema_general_de_participaciones",
+    "recursos_propios_alcald_as_gobernaciones_y_resguardos_ind_genas_",
+    "recursos_de_credito",
+    "recursos_propios"
+]
 
-valor_col = valor_cols[0]
+for c in double_cols:
+    if c in df.columns:
+        df = df.withColumn(c, col(c).cast(DoubleType()))
 
-print(f"\nColumna de valor detectada: {valor_col}")
+int_cols = [
+    "dias_adicionados",
+    "codigo_entidad",
+    "codigo_proveedor",
+    "sistema_general_de_regal_as"
+]
 
-# Limpieza preventiva (si existieran comas)
-df = df.withColumn(
-    valor_col,
-    regexp_replace(col(valor_col), ",", "")
-)
+for c in int_cols:
+    if c in df.columns:
+        df = df.withColumn(c, col(c).cast(IntegerType()))
 
-# Cast real a double (igual que tu bloque correcto)
-df = df.withColumn(
-    valor_col,
-    col(valor_col).cast("double")
-)
+long_cols = ["saldo_cdp", "saldo_vigencia"]
 
-# Eliminar registros donde no se pudo convertir
-df = df.filter(col(valor_col).isNotNull())
+for c in long_cols:
+    if c in df.columns:
+        df = df.withColumn(c, col(c).cast(LongType()))
 
-print("✓ Columna convertida correctamente a double")
-df.select(valor_col).describe().show()
+print("\n=== ESQUEMA DESPUÉS DE CAST ===")
+df.printSchema()
 
+# %%
+# Primeras filas
+df.show(10, truncate=True)
 
-# ==========================================================
-# 5. ESTADÍSTICAS DE VALOR DEL CONTRATO
-# ==========================================================
+# %%
+# Estadísticas generales
+df.describe().show()
 
-print("\n=== ESTADÍSTICAS DE VALOR DEL CONTRATO ===")
+# %%
+# Valores nulos
+from pyspark.sql.types import DoubleType, FloatType
 
-df.select(
-    spark_min(valor_col).alias("Min"),
-    spark_max(valor_col).alias("Max"),
-    avg(valor_col).alias("Promedio"),
-    stddev(valor_col).alias("Desv_Std")
-).show(truncate=False)
+exprs = []
 
+for c in df.columns:
+    dtype = dict(df.dtypes)[c]
 
-# ==========================================================
-# 6. DETECCIÓN DE OUTLIERS (IQR)
-# ==========================================================
+    # Si es numérico (double o float), usar isnan
+    if dtype in ["double", "float"]:
+        expr = count(when(isnull(col(c)) | isnan(col(c)), c)).alias(c)
+    else:
+        expr = count(when(isnull(col(c)), c)).alias(c)
 
-print("\n=== DETECCIÓN DE OUTLIERS (IQR) ===")
+    exprs.append(expr)
 
-percentiles = df.approxQuantile(
-    valor_col,
-    [0.25, 0.50, 0.75, 0.95, 0.99],
-    0.01
-)
+null_counts = df.select(exprs)
 
-q1, q2, q3, p95, p99 = percentiles
+null_df = null_counts.toPandas().T
+null_df.columns = ['null_count']
+null_df['null_percentage'] = (null_df['null_count'] / df.count()) * 100
+null_df = null_df.sort_values('null_count', ascending=False)
 
-print(f"Q1 (25%): {q1:,.2f}")
-print(f"Mediana (50%): {q2:,.2f}")
-print(f"Q3 (75%): {q3:,.2f}")
-print(f"P95: {p95:,.2f}")
-print(f"P99: {p99:,.2f}")
+print(null_df[null_df['null_count'] > 0])
 
-iqr = q3 - q1
-lower_bound = q1 - 1.5 * iqr
-upper_bound = q3 + 1.5 * iqr
+# %%
+# ============================================================
+# ANÁLISIS VALOR DEL CONTRATO
+# ============================================================
 
-num_outliers = df.filter(
-    (col(valor_col) < lower_bound) |
-    (col(valor_col) > upper_bound)
-).count()
+valor_cols = [c for c in df.columns if 'valor' in c.lower() or 'precio' in c.lower()]
 
-print(f"Outliers detectados: {num_outliers:,} ({(num_outliers/total_registros)*100:.2f}%)")
+if valor_cols:
+    valor_col = valor_cols[0]
+    df = df.withColumn(valor_col + "_num", col(valor_col).cast("double"))
 
+    df.select(
+        spark_min(col(valor_col + "_num")).alias("Min"),
+        spark_max(col(valor_col + "_num")).alias("Max"),
+        avg(col(valor_col + "_num")).alias("Promedio"),
+        stddev(col(valor_col + "_num")).alias("Desv_Std")
+    ).show()
 
-# ==========================================================
-# 7. TOP 10 CONTRATOS MÁS ALTOS (VALIDACIÓN)
-# ==========================================================
+    df.select(
+        count(when(col(valor_col + "_num") < 10000000, True)).alias("< 10M"),
+        count(when((col(valor_col + "_num") >= 10000000) & (col(valor_col + "_num") < 100000000), True)).alias("10M-100M"),
+        count(when((col(valor_col + "_num") >= 100000000) & (col(valor_col + "_num") < 1000000000), True)).alias("100M-1B"),
+        count(when(col(valor_col + "_num") >= 1000000000, True)).alias("> 1B")
+    ).show()
 
-print("\n=== TOP 10 CONTRATOS POR VALOR ===")
-
-df.orderBy(col(valor_col).desc()) \
-  .select(
-      "nombre_entidad",
-      "departamento",
-      valor_col
-  ) \
-  .show(10, truncate=False)
-
-
-# ==========================================================
-# 8. DISTRIBUCIÓN POR ENTIDAD
-# ==========================================================
+# %%
+# ============================================================
+# TOP 10 ENTIDADES
+# ============================================================
 
 entidad_cols = [c for c in df.columns if 'entidad' in c.lower()]
 
-if entidad_cols:
+if entidad_cols and valor_cols:
     entidad_col = entidad_cols[0]
-
-    print("\n=== TOP 10 ENTIDADES POR VALOR TOTAL CONTRATADO ===")
 
     df.groupBy(entidad_col) \
         .agg(
             count("*").alias("num_contratos"),
-            spark_sum(valor_col).alias("valor_total"),
-            avg(valor_col).alias("valor_promedio")
+            spark_sum(col(valor_col + "_num")).alias("valor_total"),
+            avg(col(valor_col + "_num")).alias("valor_promedio")
         ) \
         .orderBy(desc("valor_total")) \
         .show(10, truncate=False)
 
+# %%
+# ============================================================
+# TIPO DE CONTRATO
+# ============================================================
 
-# ==========================================================
-# 9. ANÁLISIS TEMPORAL
-# ==========================================================
+tipo_cols = [c for c in df.columns if 'tipo' in c.lower()]
+if tipo_cols:
+    df.groupBy(tipo_cols[0]) \
+        .count() \
+        .orderBy(desc("count")) \
+        .show(20, truncate=False)
 
-fecha_cols = [c for c in df.columns if 'fecha' in c.lower()]
+# %%
+# ============================================================
+# ESTADO DEL CONTRATO
+# ============================================================
 
-if fecha_cols:
-    fecha_col = fecha_cols[0]
+estado_cols = [c for c in df.columns if 'estado' in c.lower()]
+if estado_cols:
+    df.groupBy(estado_cols[0]) \
+        .count() \
+        .orderBy(desc("count")) \
+        .show(20, truncate=False)
 
-    df = df.withColumn("fecha_parsed", to_date(col(fecha_col)))
-    df = df.withColumn("anio", year(col("fecha_parsed")))
-    df = df.withColumn("mes", month(col("fecha_parsed")))
+# %%
+# ============================================================
+# TOP 10 PROVEEDORES
+# ============================================================
 
-    print("\n=== CONTRATOS POR AÑO ===")
+proveedor_cols = [c for c in df.columns if 'proveedor' in c.lower()]
+if proveedor_cols and valor_cols:
+    df.groupBy(proveedor_cols[0]) \
+        .agg(
+            count("*").alias("num_contratos"),
+            spark_sum(col(valor_col + "_num")).alias("valor_total")
+        ) \
+        .orderBy(desc("valor_total")) \
+        .show(10, truncate=False)
 
-    df.groupBy("anio") \
-        .agg(count("*").alias("num_contratos")) \
-        .orderBy("anio") \
-        .show()
+# %%
+# ============================================================
+# OUTLIERS (IQR)
+# ============================================================
 
+if valor_cols:
+    quantiles = df.approxQuantile(valor_col + "_num", [0.25, 0.75], 0.01)
+    Q1, Q3 = quantiles
+    IQR = Q3 - Q1
 
-# ==========================================================
-# 10. GUARDAR DATASET EDA LIMPIO
-# ==========================================================
+    lower = Q1 - 1.5 * IQR
+    upper = Q3 + 1.5 * IQR
 
-processed_path = "/opt/spark-data/processed/secop_eda"
+    outliers = df.filter(
+        (col(valor_col + "_num") < lower) |
+        (col(valor_col + "_num") > upper)
+    ).count()
 
-os.makedirs("/opt/spark-data/processed", exist_ok=True)
+    print(f"Outliers detectados: {outliers:,}")
 
-df.write.mode("overwrite").parquet(processed_path)
+# %%
+# ============================================================
+# ANÁLISIS TEMPORAL
+# ============================================================
 
-print(f"\n✓ Dataset EDA guardado en: {processed_path}")
+fecha_cols_present = [c for c in fecha_cols if c in df.columns]
 
+if fecha_cols_present:
+    fecha_col = fecha_cols_present[0]
 
-# ==========================================================
-# 11. CERRAR SESIÓN
-# ==========================================================
+    df.groupBy(
+        df[fecha_col].substr(1, 4).alias("anio")
+    ).agg(
+        count("*").alias("num_contratos"),
+        spark_sum(col(valor_col + "_num")).alias("valor_total") if valor_cols else count("*")
+    ).orderBy("anio").show()
+
+# %%
+# Guardar dataset procesado
+output_path = "/opt/spark-data/processed/secop_eda.parquet"
+df.write.mode("overwrite").parquet(output_path)
 
 spark.stop()
-print("SparkSession finalizada correctamente")
+print("EDA finalizado correctamente")
