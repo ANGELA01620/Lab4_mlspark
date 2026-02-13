@@ -164,3 +164,39 @@ print("Proceso finalizado correctamente")
 # Este filtro implica para nosotras que la variable "departamento"
 # tendrá una única categoría en el dataset final.
 # -------------------------------------------------------------
+# ============================================================
+# RETO 1 - Inicialización del entorno Spark
+# ------------------------------------------------------------
+# Se crea la SparkSession que permitirá ejecutar el
+# procesamiento distribuido de datos.
+# Se configuran recursos de memoria para driver y executor.
+# El entorno queda listo para ejecutar transformaciones
+# sobre grandes volúmenes de información.
+# ============================================================
+
+# ============================================================
+# RETO 2 - Extracción de datos desde API SECOP II
+# ------------------------------------------------------------
+# Se establece conexión con la API de datos abiertos.
+# Se aplican filtros:
+#   • Departamento: Bogotá
+#   • Rango temporal: Q1 2025
+#   • Límite de registros controlado
+#
+# El objetivo es obtener un dataset consistente,
+# filtrado y enfocado para análisis posterior.
+# ============================================================
+
+# ============================================================
+# RETO 3 - Carga y exploración inicial
+# ------------------------------------------------------------
+# Se cargan los datos JSON en un DataFrame de Spark.
+# Se valida:
+#   • Total de registros
+#   • Número de columnas
+#   • Esquema de tipos de datos
+#
+# Esta inspección permite entender la estructura
+# del dataset antes de transformarlo.
+# ============================================================
+

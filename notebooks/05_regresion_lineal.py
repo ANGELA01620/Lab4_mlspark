@@ -1,358 +1,330 @@
-# %% [markdown]
-# # Notebook 05: Regresión Lineal
-#
-# **Sección 14 - Regresión**: Predicción del valor de contratos
-#
-# **Objetivo**: Entrenar un modelo de regresión lineal para predecir el precio base.
-#
-# ## Actividades:
-# 1. Dividir datos en train/test
-# 2. Entrenar LinearRegression
-# 3. Evaluar con RMSE, MAE, R²
-# 4. Analizar coeficientes
+# ============================================================
+# Notebook 05: Regresión Lineal
+# Objetivo: Predecir valor del contrato (escala log)
+# ============================================================
 
-# %%
 from pyspark.sql import SparkSession
 from pyspark.ml.regression import LinearRegression
 from pyspark.ml.evaluation import RegressionEvaluator
-from pyspark.sql.functions import col
+from pyspark.sql.functions import col, log1p
+import numpy as np
+import matplotlib.pyplot as plt
 
-# %%
+# ============================================================
+# 1. Crear sesión Spark
+# ============================================================
+
 spark = SparkSession.builder \
     .appName("SECOP_RegresionLineal") \
     .master("spark://spark-master:7077") \
     .getOrCreate()
 
-# %%
-# Cargar datos
+# ============================================================
+# 2. Cargar datos
+# ============================================================
+
 df = spark.read.parquet("/opt/spark-data/processed/secop_ml_ready.parquet")
 
-# Renombrar columnas para consistencia
-df = df.withColumnRenamed("valor_del_contrato_num", "label") \
-       .withColumnRenamed("features_pca", "features")
+# El parquet ya contiene: label y features_pca
+df = df.withColumnRenamed("features_pca", "features")
 
-# Filtrar valores nulos
 df = df.filter(col("label").isNotNull())
-print(f"Registros: {df.count():,}")
 
-# %% [markdown]
-# ## RETO 1: Train/Test Split Strategy
-#
-# **Pregunta**: ¿Qué proporción usarías para train vs test?
-#
-# **Opciones**:
-# - A) 50/50 - Máxima validación
-# - B) 70/30 - Balance clásico
-# - C) 80/20 - Más datos para entrenar
-# - D) 90/10 - Máximo entrenamiento
-#
-# **Consideración**: ¿Qué pasa si tienes 1 millón de registros vs 1000?
-#
-# **Justifica tu decisión**
+print(f"Registros totales: {df.count():,}")
 
-# %%
-# TODO: Define tu estrategia de split
-# Pista: Usa randomSplit con semilla (seed) para reproducibilidad
+# ============================================================
+# 3. Transformación log (CRÍTICO para estabilidad)
+# ============================================================
 
-train_ratio = 0.7  # TODO: Ajusta según tu decisión
-test_ratio = 0.3
+df = df.withColumn("label_log", log1p(col("label")))
 
-train, test = df.randomSplit([train_ratio, test_ratio], seed=42)
+# ============================================================
+# 4. Train/Test Split
+# ============================================================
 
-print(f"Train: {train.count():,} registros ({train_ratio*100:.0f}%)")
-print(f"Test: {test.count():,} registros ({test_ratio*100:.0f}%)")
+train, test = df.randomSplit([0.7, 0.3], seed=42)
 
-# TODO: Responde:
-# ¿Por qué es importante usar seed=42?
-# Respuesta:
+print(f"Train: {train.count():,}")
+print(f"Test:  {test.count():,}")
 
-# %% [markdown]
-# ## RETO 2: Configurar el Modelo
-#
-# **Objetivo**: Configurar LinearRegression con los parámetros correctos
-#
-# **Parámetros clave**:
-# - featuresCol: Columna de features
-# - labelCol: Columna objetivo
-# - maxIter: Iteraciones máximas (¿10, 100, 1000?)
-# - regParam: Regularización (0.0 = sin regularización)
-# - elasticNetParam: Tipo de regularización (0=L2, 1=L1)
-
-# %%
-# TODO: Crea el modelo de regresión lineal
-# Empezamos SIN regularización (modelo baseline)
+# ============================================================
+# 5. Configurar modelo (baseline lineal)
+# ============================================================
 
 lr = LinearRegression(
     featuresCol="features",
-    labelCol="label",
-    maxIter=100,           # TODO: ¿Es suficiente?
-    regParam=0.0,          # Sin regularización
-    elasticNetParam=0.0    # No aplica sin regParam
+    labelCol="label_log",
+    maxIter=100,
+    regParam=0.0,
+    elasticNetParam=0.0
 )
 
-print("✓ Modelo configurado")
-print(f"  maxIter: {lr.getMaxIter()}")
-print(f"  regParam: {lr.getRegParam()}")
+print("Modelo configurado")
 
-# %% [markdown]
-# ## PASO 3: Entrenar el Modelo
+# ============================================================
+# 6. Entrenamiento
+# ============================================================
 
-# %%
-print("Entrenando modelo de regresión lineal...")
+print("Entrenando modelo...")
 lr_model = lr.fit(train)
 
-print("✓ Modelo entrenado")
-print(f"  Iteraciones completadas: {lr_model.summary.totalIterations}")
-print(f"  RMSE (train): ${lr_model.summary.rootMeanSquaredError:,.2f}")
-print(f"  R² (train): {lr_model.summary.r2:.4f}")
+print("Modelo entrenado")
+print(f"Iteraciones: {lr_model.summary.totalIterations}")
+print(f"RMSE Train (log): {lr_model.summary.rootMeanSquaredError:.4f}")
+print(f"R² Train (log):   {lr_model.summary.r2:.4f}")
 
-# %% [markdown]
-# ## RETO 3: Interpretar R²
-#
-# **Pregunta**: Si R² = 0.65, ¿qué significa?
-#
-# **Opciones**:
-# - A) El modelo es 65% preciso
-# - B) El modelo explica 65% de la varianza en los datos
-# - C) El modelo tiene 65% de error
-# - D) El modelo está 35% equivocado
-#
-# **Responde y explica**
+# ============================================================
+# 7. Predicciones
+# ============================================================
 
-# %%
-# TODO: Escribe tu respuesta
-# R² significa:
-
-# TODO: ¿Es 0.65 un buen R²?
-# Depende de:
-
-# %% [markdown]
-# ## PASO 4: Predicciones en Test
-
-# %%
 predictions = lr_model.transform(test)
 
-print("\n=== PREDICCIONES EN TEST ===")
-predictions.select("label", "prediction").show(10)
+predictions.select("label_log", "prediction").show(10)
 
-# %% [markdown]
-# ## RETO 4: Análisis de Predicciones
-#
-# **Objetivo**: Analizar la calidad de las predicciones
-#
-# **Instrucciones**:
-# 1. Calcula el error absoluto por cada predicción
-# 2. Identifica las 10 predicciones con mayor error
-# 3. ¿Hay un patrón en los errores grandes?
+# ============================================================
+# 8. Evaluación formal (ESCALA LOG)
+# ============================================================
 
-# %%
-# TODO: Calcula el error absoluto
-# Pista: error = abs(prediction - label)
-
-from pyspark.sql.functions import abs as spark_abs
-
-predictions_with_error = predictions.withColumn(
-    "absolute_error",
-    spark_abs(col("prediction") - col("label"))
-)
-
-# TODO: Encuentra las 10 peores predicciones
-# predictions_with_error.orderBy(col("absolute_error").desc()).select(...).show(10)
-
-# TODO: Calcula el error porcentual
-# error_porcentual = (absolute_error / label) * 100
-# ¿Hay contratos donde el error es >100%?
-
-# %% [markdown]
-# ## PASO 5: Evaluación Formal
-
-# %%
-# Crear evaluadores para diferentes métricas
 evaluator_rmse = RegressionEvaluator(
-    labelCol="label",
+    labelCol="label_log",
     predictionCol="prediction",
     metricName="rmse"
 )
 
 evaluator_mae = RegressionEvaluator(
-    labelCol="label",
+    labelCol="label_log",
     predictionCol="prediction",
     metricName="mae"
 )
 
 evaluator_r2 = RegressionEvaluator(
-    labelCol="label",
+    labelCol="label_log",
     predictionCol="prediction",
     metricName="r2"
 )
 
-# Calcular métricas
 rmse = evaluator_rmse.evaluate(predictions)
 mae = evaluator_mae.evaluate(predictions)
 r2 = evaluator_r2.evaluate(predictions)
 
 print("\n" + "="*60)
-print("MÉTRICAS DEL MODELO")
+print("MÉTRICAS TEST (ESCALA LOG)")
 print("="*60)
-print(f"RMSE (Test): ${rmse:,.2f}")
-print(f"MAE (Test):  ${mae:,.2f}")
-print(f"R² (Test):   {r2:.4f}")
+print(f"RMSE (log): {rmse:.4f}")
+print(f"MAE  (log): {mae:.4f}")
+print(f"R²   (log): {r2:.4f}")
 print("="*60)
 
-# %% [markdown]
-# ## RETO 5: Comparar Train vs Test
-#
-# **Objetivo**: Detectar overfitting o underfitting
-#
-# **Pregunta**: ¿Qué indica cada escenario?
-#
-# **Escenarios**:
-# - A) R² train = 0.9, R² test = 0.85 → ¿Qué pasa?
-# - B) R² train = 0.6, R² test = 0.58 → ¿Qué pasa?
-# - C) R² train = 0.95, R² test = 0.45 → ¿Qué pasa?
-#
-# **Compara tus resultados**
+# ============================================================
+# 9. Comparación Train vs Test
+# ============================================================
 
-# %%
 print("\n=== COMPARACIÓN TRAIN VS TEST ===")
-print(f"R² Train:  {lr_model.summary.r2:.4f}")
-print(f"R² Test:   {r2:.4f}")
+print(f"R² Train (log): {lr_model.summary.r2:.4f}")
+print(f"R² Test  (log): {r2:.4f}")
 print(f"Diferencia: {abs(lr_model.summary.r2 - r2):.4f}")
 
-# TODO: Analiza:
-# ¿Hay overfitting? (Sí/No)
-# ¿Hay underfitting? (Sí/No)
-# Justifica:
+# ============================================================
+# 10. Análisis de coeficientes
+# ============================================================
 
-# %% [markdown]
-# ## RETO 6: Analizar Coeficientes
-#
-# **Objetivo**: Entender qué features son más importantes
-#
-# **Pregunta**: Si un coeficiente es muy grande (positivo o negativo),
-# ¿qué significa?
-
-# %%
 coefficients = lr_model.coefficients
 intercept = lr_model.intercept
 
-print(f"\nIntercept: ${intercept:,.2f}")
-print(f"Número de coeficientes: {len(coefficients)}")
-
-# TODO: Encuentra los 5 coeficientes más grandes (en valor absoluto)
-# Pista: Usa numpy para ordenar por abs(coef)
-
-import numpy as np
+print(f"\nIntercept (log): {intercept:.4f}")
+print(f"Número de features: {len(coefficients)}")
 
 coef_array = np.array(coefficients)
 abs_coefs = np.abs(coef_array)
-top_5_idx = np.argsort(abs_coefs)[-5:]
+top_idx = np.argsort(abs_coefs)[-5:]
 
-print("\n=== TOP 5 FEATURES MÁS INFLUYENTES ===")
-for i, idx in enumerate(reversed(top_5_idx)):
-    print(f"{i+1}. Feature {idx}: coef = {coef_array[idx]:.4f}")
+print("\nTop 5 coeficientes más influyentes:")
+for idx in reversed(top_idx):
+    print(f"Feature {idx} | coef = {coef_array[idx]:.6f}")
 
-# TODO: Interpreta:
-# ¿Qué significa un coeficiente positivo vs negativo?
-# Respuesta:
+# ============================================================
+# 11. Análisis de residuos (escala log)
+# ============================================================
 
-# %% [markdown]
-# ## RETO BONUS 1: Residuos
-#
-# **Objetivo**: Analizar la distribución de los errores (residuos)
-#
-# **Pregunta**: En un buen modelo, ¿cómo deberían distribuirse los residuos?
-#
-# **Instrucciones**:
-# 1. Calcula residuo = label - prediction
-# 2. Genera un histograma de residuos
-# 3. ¿Están centrados en cero?
-# 4. ¿Hay sesgo (bias)?
+predictions = predictions.withColumn(
+    "residual_log",
+    col("label_log") - col("prediction")
+)
 
-# %%
-# TODO: Implementa el análisis de residuos
-# import matplotlib.pyplot as plt
-# import pandas as pd
-#
-# # Calcular residuos
-# residuals_df = predictions.withColumn("residual", col("label") - col("prediction"))
-#
-# # Convertir muestra a Pandas para graficar
-# residuals_sample = residuals_df.select("residual").sample(0.1).toPandas()
-#
-# # Histograma
-# plt.figure(figsize=(10, 5))
-# plt.hist(residuals_sample['residual'], bins=50, edgecolor='black')
-# plt.xlabel('Residuo (Error)')
-# plt.ylabel('Frecuencia')
-# plt.title('Distribución de Residuos')
-# plt.axvline(x=0, color='red', linestyle='--', label='Cero')
-# plt.legend()
-# plt.savefig('/opt/spark-data/processed/residuals_distribution.png')
-# print("Gráfico guardado en /opt/spark-data/processed/residuals_distribution.png")
+residuals_sample = predictions.select("residual_log") \
+                               .sample(0.2, seed=42) \
+                               .toPandas()
 
-# %% [markdown]
-# ## RETO BONUS 2: Feature Importance Aproximado
-#
-# **Objetivo**: Identificar las features más importantes
-#
-# **Método**: Entrenar modelo quitando una feature a la vez,
-# medir impacto en R²
-#
-# **Nota**: Este experimento es computacionalmente costoso,
-# solo para datasets pequeños
+plt.figure(figsize=(10,5))
+plt.hist(residuals_sample["residual_log"], bins=60)
+plt.axvline(x=0)
+plt.title("Distribución de Residuos (Escala Log)")
+plt.xlabel("Residuo log")
+plt.ylabel("Frecuencia")
+plt.tight_layout()
+plt.savefig("/opt/spark-data/processed/residuals_log_distribution.png")
 
-# %%
-# TODO: (Opcional) Implementa el análisis de feature importance
-# Este reto es avanzado, requiere:
-# 1. Iterar sobre cada feature
-# 2. Entrenar modelo sin esa feature
-# 3. Comparar R² con el modelo completo
-# 4. Features que causan mayor caída en R² son más importantes
+print("Gráfico de residuos guardado")
 
-# %% [markdown]
-# ## Preguntas de Reflexión
-#
-# 1. **¿Por qué usar RMSE en lugar de solo MAE?**
-#    Respuesta:
-#
-# 2. **Si todas las predicciones fueran = promedio de labels, ¿cuál sería el R²?**
-#    Respuesta:
-#
-# 3. **¿Cuándo preferirías optimizar para RMSE vs MAE?**
-#    Respuesta:
-#
-# 4. **¿Cómo mejorarías este modelo? (menciona al menos 3 estrategias)**
-#    Respuestas:
-#    -
-#    -
-#    -
+# ============================================================
+# 12. Guardar modelo y predicciones
+# ============================================================
 
-# %%
-# TODO: Escribe tus respuestas arriba
-
-# %%
-# Guardar modelo
-model_path = "/opt/spark-data/processed/linear_regression_model"
+model_path = "/opt/spark-data/processed/linear_regression_model_log"
 lr_model.write().overwrite().save(model_path)
-print(f"\n✓ Modelo guardado en: {model_path}")
 
-# %%
-# Guardar predicciones
-predictions_path = "/opt/spark-data/processed/predictions_lr.parquet"
+predictions_path = "/opt/spark-data/processed/predictions_lr_log.parquet"
 predictions.write.mode("overwrite").parquet(predictions_path)
-print(f"✓ Predicciones guardadas en: {predictions_path}")
 
-# %%
+print("Modelo y predicciones guardados correctamente")
+
+# ============================================================
+# 13. Resumen final
+# ============================================================
+
 print("\n" + "="*60)
-print("RESUMEN REGRESIÓN LINEAL")
+print("RESUMEN FINAL - REGRESIÓN LINEAL")
 print("="*60)
-print(f"✓ Modelo entrenado con {train.count():,} registros")
-print(f"✓ Evaluado con {test.count():,} registros")
-print(f"✓ RMSE: ${rmse:,.2f}")
-print(f"✓ R²: {r2:.4f}")
-print(f"✓ Próximo paso: Probar regularización (notebook 07)")
+print(f"Registros Train: {train.count():,}")
+print(f"Registros Test:  {test.count():,}")
+print(f"RMSE (log): {rmse:.4f}")
+print(f"R² (log):   {r2:.4f}")
+print("Modelo evaluado correctamente en escala log")
 print("="*60)
 
-# %%
 spark.stop()
+
+# Respuesta reto 1:
+# Se utilizó una división 70/30 (70% entrenamiento, 30% prueba),
+# ya que representa un balance clásico entre capacidad de aprendizaje
+# del modelo y validación robusta.
+#
+# Con 132,641 registros, el conjunto de entrenamiento (92,851)
+# es suficientemente grande para capturar patrones,
+# mientras que el conjunto de prueba (39,790) permite
+# una evaluación estadísticamente estable.
+#
+# Si el dataset tuviera 1 millón de registros,
+# podría utilizarse 80/20 o incluso 90/10,
+# ya que el conjunto de test seguiría siendo grande.
+#
+# Si el dataset tuviera solo 1,000 registros,
+# sería más recomendable usar validación cruzada
+# para evitar alta varianza en la evaluación.
+#
+# Es importante usar seed=42 para garantizar reproducibilidad,
+# es decir, que la partición sea exactamente la misma
+# en cada ejecución del experimento.
+
+# Reto 2:
+# Se configuró un modelo baseline sin regularización (regParam=0.0)
+# con el objetivo de evaluar primero el comportamiento lineal puro.
+#
+# maxIter=100 es suficiente dado que el optimizador
+# convergió inmediatamente (0 iteraciones),
+# lo que indica que el problema se resolvió
+# mediante solución analítica cerrada.
+#
+# Este modelo sirve como punto de comparación
+# antes de aplicar regularización en el Notebook 07.
+
+# Reto 3 R² significa:
+# El coeficiente de determinación R² representa
+# la proporción de la varianza del valor del contrato
+# que es explicada por el modelo.
+#
+# No representa porcentaje de precisión.
+#
+# En este caso:
+# R² Test (log) = 0.1791
+# Esto significa que el modelo explica aproximadamente
+# el 17.9% de la variabilidad del valor del contrato.
+#
+# Reto 4:
+# Se observan errores elevados en contratos de gran magnitud.
+# Esto indica presencia de alta dispersión y contratos outliers.
+#
+# La transformación logarítmica redujo significativamente
+# la explosión numérica observada en la escala original.
+#
+# Los mayores errores tienden a concentrarse en contratos
+# extremadamente grandes, lo cual sugiere que el modelo lineal
+# no captura completamente la dinámica de contratos de alto valor.
+#
+# Reto 5:
+# No se observa overfitting significativo,
+# ya que la diferencia entre R² Train y Test es pequeña (0.0237).
+#
+# Tampoco existe sobreajuste severo.
+#
+# Sin embargo, el modelo presenta underfitting leve,
+# debido a que el R² es bajo (~0.18),
+# lo que indica que el modelo lineal explica
+# una fracción limitada de la varianza.
+#
+# Esto sugiere que la relación entre variables
+# podría no ser estrictamente lineal.
+
+# Interpretación:
+# Un coeficiente positivo indica que al aumentar esa feature,
+# el valor logarítmico del contrato tiende a aumentar.
+#
+# Un coeficiente negativo indica relación inversa.
+#
+# Un coeficiente grande en valor absoluto implica
+# mayor influencia relativa en la predicción.
+#
+# En este modelo, las features 18, 11 y 9
+# muestran mayor impacto en la predicción.
+#
+# Debido a que se utilizó PCA,
+# la interpretación directa es limitada,
+# ya que cada componente principal representa
+# una combinación lineal de variables originales.
+
+
+# Interpretación de residuos:
+# En un modelo bien ajustado,
+# los residuos deberían distribuirse aproximadamente
+# de forma normal y centrados en cero.
+#
+# En este caso, los residuos están razonablemente centrados,
+# aunque presentan cierta dispersión,
+# consistente con el R² moderadamente bajo.
+#
+# No se observa sesgo extremo,
+# lo cual indica que el modelo no sobreestima
+# ni subestima sistemáticamente.
+
+# Nota:
+# El análisis de feature importance removiendo
+# una feature a la vez es computacionalmente costoso.
+#
+# Dado el tamaño del dataset (132k registros),
+# este experimento podría ejecutarse,
+# pero se recomienda realizarlo únicamente
+# si se requiere análisis interpretativo profundo.
+#
+# Alternativamente, modelos como RandomForest
+# proveen importance de manera nativa.
+
+
+# 1. ¿Por qué usar RMSE en lugar de solo MAE?
+# RMSE penaliza más los errores grandes,
+# lo que lo hace útil cuando los outliers
+# tienen impacto económico significativo.
+
+# 2. Si todas las predicciones fueran = promedio de labels,
+# el R² sería aproximadamente 0.
+
+# 3. Preferiría RMSE cuando errores grandes son críticos.
+# Preferiría MAE cuando se busca robustez ante outliers.
+
+# 4. ¿Cómo mejorar el modelo?
+# - Aplicar regularización (L1, L2 o ElasticNet)
+# - Probar modelos no lineales (RandomForest, GBT)
+# - Realizar ingeniería de features adicional
+# - Detectar y tratar outliers extremos
+# - Ajustar hiperparámetros mediante validación cruzada
+
+
