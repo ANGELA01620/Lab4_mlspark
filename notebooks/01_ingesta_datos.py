@@ -148,3 +148,19 @@ print("="*60)
 client.close()
 spark.stop()
 print("Proceso finalizado correctamente")
+
+# -------------------------------------------------------------
+# FILTRO GEOGRÁFICO
+# -------------------------------------------------------------
+# Nosotras decidimos trabajar únicamente con contratos del 
+# "Distrito Capital de Bogotá" con el objetivo de:
+# 
+# 1. Reducir heterogeneidad regional.
+# 2. Evitar ruido asociado a diferencias administrativas
+#    entre departamentos.
+# 3. Facilitar un análisis más controlado y consistente
+#    para el modelado posterior.
+#
+# Este filtro implica para nosotras que la variable "departamento"
+# tendrá una única categoría en el dataset final.
+# -------------------------------------------------------------
