@@ -1,80 +1,79 @@
 # %% [markdown]
 # # Notebook 01: Ingesta de Datos
 #
-# **Objetivo**: Descargar y cargar datos de contratos públicos desde la API de Datos Abiertos Colombia (SECOP II).
+# **Objetivo**: Descargar y cargar datos filtrados de SECOP II
 #
-# **Dataset**: SECOP II - Contratos Electrónicos
+# **Filtro aplicado**:
+# - Departamento: Distrito Capital de Bogotá
+# - Fecha de firma: 2025-01-01 a 2025-03-31
+# - Límite: 150,000 registros
 #
-# **Fuente**: https://www.datos.gov.co/Gastos-Gubernamentales/SECOP-II-Contratos-Electr-nicos/jbjy-vk9h
-#
-# ## Actividades:
-# 1. Configurar SparkSession con Delta Lake
-# 2. Descargar dataset usando API Socrata (opcional) o leer CSV local
-# 3. Explorar esquema inicial
-# 4. Guardar en formato Parquet optimizado
+# Fuente:
+# https://www.datos.gov.co/Gastos-Gubernamentales/SECOP-II-Contratos-Electr-nicos/jbjy-vk9h
 
 # %%
 # Importar librerías
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, to_date, year, month
+from sodapy import Socrata
+import json
 import os
 
 # %%
-# Configurar SparkSession
-# Conectamos al cluster Spark Master
+# Configurar SparkSession (ACTUALIZADO)
 spark = SparkSession.builder \
     .appName("SECOP_Ingesta") \
     .master("local[*]") \
-    .config("spark.executor.memory", "2g") \
-    .config("spark.driver.memory", "1g") \
+    .config("spark.executor.memory", "8g") \
+    .config("spark.driver.memory", "4g") \
     .getOrCreate()
 
 print(f"Spark Version: {spark.version}")
 print(f"Spark Master: {spark.sparkContext.master}")
 
 # %%
-# OPCIÓN 1: Descargar datos desde API de Datos Abiertos Colombia
-# Nota: Este dataset puede ser muy grande (varios GB), por lo que limitamos a 100k registros
-# Para producción, considera descargar el CSV completo manualmente
+# Descargar datos desde API Socrata con filtro
+print("Descargando datos filtrados desde API Socrata...")
 
-# Dataset ID: jbjy-vk9h
-# API Endpoint: https://www.datos.gov.co/resource/jbjy-vk9h.json
+client = Socrata("www.datos.gov.co", None)
 
-print("Descargando datos desde API Socrata...")
-print("Nota: Limitamos a 100,000 registros para el ejercicio práctico")
+results = client.get(
+    "jbjy-vk9h",
+    query="""
+        SELECT *
+        WHERE 
+            departamento = "Distrito Capital de Bogotá"
+        AND
+            fecha_de_firma >= '2025-01-01T00:00:00'
+        AND
+            fecha_de_firma < '2025-04-01T00:00:00'
+        LIMIT 150000
+    """
+)
 
-# Usando requests para descargar datos (alternativa a sodapy)
-import requests
-import json
+print(f"Registros descargados: {len(results)}")
 
-# URL de la API con límite de registros
-api_url = "https://www.datos.gov.co/resource/jbjy-vk9h.json?$limit=1000"
-
-response = requests.get(api_url)
-data = response.json()
-
-print(f"Registros descargados: {len(data)}")
-
+# %%
 # Guardar JSON localmente
-json_path = "/opt/spark-data/raw/secop_contratos.json"
+json_path = "/opt/spark-data/raw/secop_bogota_2025_q1.json"
 os.makedirs(os.path.dirname(json_path), exist_ok=True)
 
-with open(json_path, 'w', encoding='utf-8') as f:
-    for record in data:
-        f.write(json.dumps(record, ensure_ascii=False) + '\n')
+with open(json_path, "w", encoding="utf-8") as f:
+    for record in results:
+        f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 print(f"Datos guardados en: {json_path}")
 
 # %%
-# OPCIÓN 2: Leer desde JSON descargado
-print("Leyendo datos desde JSON...")
+# Leer JSON con Spark
+print("Leyendo datos con Spark...")
 df_raw = spark.read.json(json_path)
 
-print(f"Total de registros: {df_raw.count()}")
+print(f"Total de registros: {df_raw.count():,}")
 print(f"Total de columnas: {len(df_raw.columns)}")
 
 # %%
-# Explorar esquema del dataset
+# Explorar esquema
 print("\n=== ESQUEMA DEL DATASET ===")
 df_raw.printSchema()
 
@@ -84,22 +83,7 @@ print("\n=== PRIMERAS 5 FILAS ===")
 df_raw.show(5, truncate=False)
 
 # %%
-# Mostrar nombres de columnas
-print("\n=== COLUMNAS DISPONIBLES ===")
-for col_name in df_raw.columns:
-    print(f"- {col_name}")
-
-# %%
-# Estadísticas básicas del dataset
-print("\n=== INFORMACIÓN DEL DATASET ===")
-print(f"Registros totales: {df_raw.count():,}")
-print(f"Columnas totales: {len(df_raw.columns)}")
-
-# %%
-# Seleccionar columnas clave para el análisis de ML
-# Nota: Los nombres de columnas pueden variar según la versión del dataset
-# Ajusta según las columnas disponibles
-
+# Columnas clave
 columnas_clave = [
     "referencia_del_contrato",
     "nit_entidad",
@@ -115,37 +99,35 @@ columnas_clave = [
     "estado_contrato"
 ]
 
-# Verificar qué columnas existen realmente
-columnas_disponibles = [col for col in columnas_clave if col in df_raw.columns]
-print(f"\n=== COLUMNAS SELECCIONADAS ({len(columnas_disponibles)}) ===")
-for col in columnas_disponibles:
-    print(f"- {col}")
+columnas_disponibles = [c for c in columnas_clave if c in df_raw.columns]
+
+print(f"\nColumnas seleccionadas ({len(columnas_disponibles)}):")
+for c in columnas_disponibles:
+    print(f"- {c}")
 
 # %%
-# Filtrar columnas disponibles
+# Seleccionar columnas disponibles
 if columnas_disponibles:
     df_clean = df_raw.select(*columnas_disponibles)
 else:
-    # Si no encontramos las columnas esperadas, usamos todas
-    print("ADVERTENCIA: No se encontraron las columnas esperadas. Usando todas las columnas.")
+    print("No se encontraron columnas esperadas. Usando todas.")
     df_clean = df_raw
 
 # %%
-# Guardar en formato Parquet optimizado
-output_path = "/opt/spark-data/raw/secop_contratos.parquet"
-print(f"\n=== GUARDANDO EN FORMATO PARQUET ===")
-print(f"Ruta: {output_path}")
+# Guardar en Parquet
+output_path = "/opt/spark-data/raw/secop_bogota_2025_q1.parquet"
 
 df_clean.write \
     .mode("overwrite") \
     .parquet(output_path)
 
-print("Datos guardados exitosamente en formato Parquet")
+print("Datos guardados en formato Parquet")
 
 # %%
-# Verificar que el archivo se guardó correctamente
-print("\n=== VERIFICACIÓN ===")
+# Verificación
 df_verificacion = spark.read.parquet(output_path)
+
+print("\n=== VERIFICACIÓN ===")
 print(f"Registros en Parquet: {df_verificacion.count():,}")
 print(f"Columnas en Parquet: {len(df_verificacion.columns)}")
 
@@ -154,13 +136,15 @@ print(f"Columnas en Parquet: {len(df_verificacion.columns)}")
 print("\n" + "="*60)
 print("RESUMEN DE INGESTA")
 print("="*60)
-print(f"✓ Datos descargados desde API Socrata")
+print("✓ Fuente: API Socrata")
+print("✓ Filtro: Bogotá 2025 Q1")
 print(f"✓ Registros procesados: {df_clean.count():,}")
-print(f"✓ Formato de salida: Parquet")
+print("✓ Formato salida: Parquet")
 print(f"✓ Ubicación: {output_path}")
 print("="*60)
 
 # %%
-# Detener SparkSession
+# Cerrar conexión
+client.close()
 spark.stop()
-print("SparkSession finalizada")
+print("Proceso finalizado correctamente")
