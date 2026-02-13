@@ -76,7 +76,7 @@ print(f"Ratio de desbalance: {clase_0/clase_1:.1f}:1\n")
 
 # Respuesta
 print("¿Está balanceado? NO")
-print("\nTu decisión: D) Cambiar el threshold de clasificación")
+print("\n decisión: D) Cambiar el threshold de clasificación")
 print("Razón: Con 90% clase 0, threshold=0.5 es muy conservador.")
 print("       Usaremos threshold ≈ proporción de clase 1.\n")
 
@@ -362,7 +362,7 @@ Escala de AUC-ROC:
   0.90-0.95 → Muy bueno 
   0.95-1.00 → Excelente (verificar data leakage) 
 
-Tu resultado actual: AUC = {auc:.4f}
+ resultado actual: AUC = {auc:.4f}
 
 """)
 
@@ -442,7 +442,7 @@ print("""
    - Riesgo de corrupción sin control
    Impacto: ALTO  (pérdida financiera, legal, reputacional)
 
-TU RESPUESTA: Los FALSOS NEGATIVOS son mucho peores.
+RESPUESTA: Los FALSOS NEGATIVOS son mucho peores.
 
 Estrategia:
 - Preferimos tener algunas FALSAS ALARMAS (FP)
