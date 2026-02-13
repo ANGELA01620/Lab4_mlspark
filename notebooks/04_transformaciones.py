@@ -11,296 +11,312 @@
 # 3. Construir pipeline completo
 # 4. Comparar resultados con y sin transformaciones
 
-# %%
+# ============================================================
+# NOTEBOOK 04: TRANSFORMACIONES AVANZADAS
+# StandardScaler + PCA + Pipeline Completo
+# ============================================================
+
 from pyspark.sql import SparkSession
-from pyspark.ml.feature import StandardScaler, PCA, VectorAssembler
+from pyspark.ml.feature import StandardScaler, PCA
 from pyspark.ml import Pipeline, PipelineModel
 from pyspark.sql.functions import col
+import numpy as np
+import matplotlib.pyplot as plt
 
-# %%
+# ============================================================
+# INICIAR SPARK
+# ============================================================
+
 spark = SparkSession.builder \
     .appName("SECOP_Transformaciones") \
     .master("spark://spark-master:7077") \
     .getOrCreate()
 
-# %%
-# Cargar datos transformados del notebook anterior
+# ============================================================
+# CARGAR DATASET
+# ============================================================
+
 df = spark.read.parquet("/opt/spark-data/processed/secop_features.parquet")
+
+print("\n" + "="*60)
+print("DATASET CARGADO")
+print("="*60)
 print(f"Registros: {df.count():,}")
 print(f"Columnas: {len(df.columns)}")
 
-# %% [markdown]
-# ## RETO 1: ¿Por qué normalizar?
-#
-# **Pregunta de análisis**: Examina los valores en `features_raw`.
-# ¿Hay features con escalas muy diferentes?
-#
-# **Instrucciones**:
-# 1. Toma una muestra de 5 registros
-# 2. Convierte `features_raw` a array y examina los valores
-# 3. Identifica si hay features con magnitudes muy diferentes (ej: 0.01 vs 1000000)
-# 4. Explica por qué esto es un problema para ML
+# ============================================================
+# RETO 1: ANALIZAR ESCALAS
+# ============================================================
 
-# %%
-# TODO: Examina los valores del vector de features
-# Pista: usa .toArray() para convertir el vector a lista
+print("\n" + "="*60)
+print("RETO 1: ANÁLISIS DE ESCALAS")
+print("="*60)
 
 sample = df.select("features_raw").limit(5).collect()
 
-# TODO: Imprime los primeros 10 valores de cada vector
-# for row in sample:
-#     features_array = row['features_raw'].toArray()
-#     print(features_array[:10])
+for i, row in enumerate(sample):
+    arr = row["features_raw"].toArray()
+    print(f"\nRegistro {i+1} - primeros 10 valores:")
+    print(arr[:10])
 
-# TODO: Responde:
-# ¿Observas diferencias grandes en las magnitudes? (Sí/No)
-# ¿Por qué es importante normalizar?
-# Respuesta:
+sample_large = df.select("features_raw").limit(1000).toPandas()
+matrix = np.array([row["features_raw"].toArray() for row in sample_large.to_dict("records")])
 
-# %% [markdown]
-# ## PASO 1: StandardScaler
-#
-# **Concepto**: StandardScaler centra los datos (media=0) y escala (std=1)
-#
-# Formula: z = (x - μ) / σ
+print("\nEstadísticas globales (features_raw):")
+print(f"Min: {matrix.min():.4f}")
+print(f"Max: {matrix.max():.4f}")
+print(f"Mean: {matrix.mean():.4f}")
+print(f"Std: {matrix.std():.4f}")
 
-# %%
-# TODO: Crea un StandardScaler
-# - inputCol: "features_raw" (del notebook anterior)
-# - outputCol: "features_scaled"
-# - withMean: False (requerido para vectores sparse)
-# - withStd: True (normalizar por desviación estándar)
+# ============================================================
+# STANDARD SCALER
+# ============================================================
 
 scaler = StandardScaler(
     inputCol="features_raw",
     outputCol="features_scaled",
-    withMean=False,  # No centra (incompatible con sparse vectors)
-    withStd=True     # Normaliza por std
+    withMean=False,
+    withStd=True
 )
 
-print("✓ StandardScaler creado")
-
-# %%
-# Entrenar el scaler
 scaler_model = scaler.fit(df)
 df_scaled = scaler_model.transform(df)
 
-print("✓ Features escaladas")
-print("\nColumnas nuevas:")
-print(df_scaled.columns[-3:])  # Últimas 3 columnas
+print("\n✓ Features escaladas correctamente")
 
-# %% [markdown]
-# ## RETO 2: Comparar antes y después de escalar
-#
-# **Objetivo**: Verificar que el escalado funcionó correctamente
-#
-# **Instrucciones**:
-# 1. Calcula estadísticas del vector `features_raw`
-# 2. Calcula estadísticas del vector `features_scaled`
-# 3. Compara las magnitudes
+# ============================================================
+# RETO 2: COMPARACIÓN ANTES VS DESPUÉS
+# ============================================================
 
-# %%
-# TODO: Convierte una muestra a pandas y calcula estadísticas
-# import pandas as pd
-# import numpy as np
-#
-# sample_df = df_scaled.select("features_raw", "features_scaled").limit(1000).toPandas()
-#
-# # Convertir vectores a matrices
-# raw_matrix = np.array([row['features_raw'].toArray() for row in sample_df.to_dict('records')])
-# scaled_matrix = np.array([row['features_scaled'].toArray() for row in sample_df.to_dict('records')])
-#
-# print("ANTES (features_raw):")
-# print(f"  Min: {raw_matrix.min():.2f}")
-# print(f"  Max: {raw_matrix.max():.2f}")
-# print(f"  Mean: {raw_matrix.mean():.2f}")
-# print(f"  Std: {raw_matrix.std():.2f}")
-#
-# print("\nDESPUÉS (features_scaled):")
-# print(f"  Min: {scaled_matrix.min():.2f}")
-# print(f"  Max: {scaled_matrix.max():.2f}")
-# print(f"  Mean: {scaled_matrix.mean():.2f}")
-# print(f"  Std: {scaled_matrix.std():.2f}")
+print("\n" + "="*60)
+print("RETO 2: COMPARACIÓN ANTES vs DESPUÉS")
+print("="*60)
 
-# %% [markdown]
-# ## RETO 3: PCA para Reducción de Dimensionalidad
-#
-# **Pregunta**: Si tu vector de features tiene 50 dimensiones,
-# ¿cuántos componentes principales deberías conservar?
-#
-# **Opciones**:
-# - A) Todos (50)
-# - B) La mitad (25)
-# - C) Los que expliquen 95% de la varianza
-# - D) Solo 5-10 componentes
-#
-# **Justifica tu respuesta**
+sample_df = df_scaled.select("features_raw", "features_scaled").limit(1000).toPandas()
 
-# %%
-# TODO: Configura PCA
-# - inputCol: "features_scaled" (ya normalizadas)
-# - outputCol: "features_pca"
-# - k: número de componentes (experimenta con diferentes valores)
+raw_matrix = np.array([row["features_raw"].toArray() for row in sample_df.to_dict("records")])
+scaled_matrix = np.array([row["features_scaled"].toArray() for row in sample_df.to_dict("records")])
 
-# ¿Cuántas features tiene tu vector?
+print("\nANTES:")
+print(f"Min: {raw_matrix.min():.4f}")
+print(f"Max: {raw_matrix.max():.4f}")
+print(f"Mean: {raw_matrix.mean():.4f}")
+print(f"Std: {raw_matrix.std():.4f}")
+
+print("\nDESPUÉS:")
+print(f"Min: {scaled_matrix.min():.4f}")
+print(f"Max: {scaled_matrix.max():.4f}")
+print(f"Mean: {scaled_matrix.mean():.4f}")
+print(f"Std: {scaled_matrix.std():.4f}")
+
+# ============================================================
+# PCA
+# ============================================================
+
 sample_vec = df_scaled.select("features_scaled").first()[0]
 num_features = len(sample_vec)
-print(f"Número total de features: {num_features}")
 
-# TODO: Decide cuántos componentes usar
-# Sugerencia: Empieza con min(10, num_features)
-k_components = min(10, num_features)
+# Crear PCA con máximo posible
+pca_full = PCA(
+    k=num_features,
+    inputCol="features_scaled",
+    outputCol="features_pca_full"
+)
+
+pca_full_model = pca_full.fit(df_scaled)
+
+explained_variance = pca_full_model.explainedVariance
+
+# ============================================
+# CÁLCULO DE VARIANZA ACUMULADA
+# ============================================
+
+cumulative = np.cumsum(explained_variance)
+
+print("\n============================================================")
+print("VARIANZA EXPLICADA")
+print("============================================================")
+
+for i, (var, cum) in enumerate(zip(explained_variance, cumulative)):
+    print(f"PC{i+1}: {var*100:.2f}% | Acumulada: {cum*100:.2f}%")
+
+# Encontrar mínimo k para ≥80%
+components_80 = np.argmax(cumulative >= 0.80) + 1
+
+if cumulative[-1] < 0.80:
+    print("\n Ni usando todos los componentes se alcanza 80%")
+else:
+    print(f"\n Componentes necesarios para ≥80% varianza: {components_80}")
+
+# ============================================================
+# BONUS: EXPERIMENTO CON DIFERENTES k
+# ============================================================
+
+print("\n" + "="*60)
+print("EXPERIMENTO PCA CON DIFERENTES k")
+print("="*60)
+
+k_values = [5, 10, 15, 20]
+explained_vars = []
+
+for k in k_values:
+    k_real = min(k, num_features)
+    pca_temp = PCA(k=k_real, inputCol="features_scaled", outputCol="temp_pca")
+    model_temp = pca_temp.fit(df_scaled)
+    var_acum = sum(model_temp.explainedVariance)
+    explained_vars.append(var_acum)
+    print(f"k={k_real}: {var_acum*100:.2f}% varianza")
+
+plt.figure(figsize=(8, 5))
+plt.plot(k_values[:len(explained_vars)],
+         [v*100 for v in explained_vars],
+         marker='o')
+plt.xlabel("Número de Componentes (k)")
+plt.ylabel("Varianza Explicada (%)")
+plt.title("PCA: Varianza vs Componentes")
+plt.grid(True)
+plt.savefig("/opt/spark-data/processed/pca_variance.png")
+print("✓ Gráfico guardado en /opt/spark-data/processed/pca_variance.png")
+
+
+# ============================================
+# CREAR PCA FINAL CON k ÓPTIMO
+# ============================================
+
+k_optimal = components_80
 
 pca = PCA(
-    k=k_components,
+    k=k_optimal,
     inputCol="features_scaled",
     outputCol="features_pca"
 )
 
-print(f"✓ PCA configurado con k={k_components} componentes")
+print(f"✓ PCA final configurado con k={k_optimal}")
 
-# %%
-# Entrenar PCA
-pca_model = pca.fit(df_scaled)
-df_pca = pca_model.transform(df_scaled)
+# ============================================
+# PIPELINE SOLO CON SCALER + PCA
+# ============================================
 
-print("✓ PCA aplicado")
-print(f"Dimensión original: {num_features}")
-print(f"Dimensión reducida: {k_components}")
+ml_pipeline = Pipeline(stages=[scaler, pca])
 
-# %% [markdown]
-# ## RETO 4: Analizar Varianza Explicada
-#
-# **Objetivo**: Entender cuánta información conservamos con PCA
-#
-# **Pregunta**: ¿Qué porcentaje de varianza explican los k componentes?
+ml_pipeline_model = ml_pipeline.fit(df)
 
-# %%
-# TODO: Obtén la varianza explicada por cada componente
-explained_variance = pca_model.explainedVariance
+df_transformed = ml_pipeline_model.transform(df)
 
-print("\n=== VARIANZA EXPLICADA POR COMPONENTE ===")
-for i, var in enumerate(explained_variance):
-    print(f"Componente {i+1}: {var*100:.2f}%")
+print("✓ Pipeline de transformaciones aplicado correctamente")
 
-# TODO: Calcula la varianza acumulada
-cumulative_variance = 0
-for i, var in enumerate(explained_variance):
-    cumulative_variance += var
-    print(f"Acumulada hasta PC{i+1}: {cumulative_variance*100:.2f}%")
+# ============================================================
+# DATASET LISTO PARA ML
+# ============================================================
 
-# TODO: Responde:
-# ¿Cuántos componentes necesitas para explicar al menos 80% de la varianza?
-# Respuesta:
-
-# %% [markdown]
-# ## RETO 5: Pipeline Completo
-#
-# **Objetivo**: Integrar todas las transformaciones en un solo pipeline
-#
-# **Orden correcto**:
-# 1. Cargar pipeline de feature engineering (notebook 03)
-# 2. Agregar StandardScaler
-# 3. Agregar PCA
-#
-# **Pregunta**: ¿Por qué es importante este orden?
-
-# %%
-# TODO: Carga el pipeline del notebook 03
-feature_pipeline = PipelineModel.load("/opt/spark-data/processed/feature_pipeline")
-print("✓ Pipeline de features cargado")
-
-# TODO: Crea un nuevo pipeline que incluya:
-# - Stages del pipeline anterior (feature_pipeline.stages)
-# - StandardScaler
-# - PCA
-
-complete_pipeline_stages = list(feature_pipeline.stages) + [scaler, pca]
-
-complete_pipeline = Pipeline(stages=complete_pipeline_stages)
-
-print(f"\n✓ Pipeline completo con {len(complete_pipeline_stages)} stages:")
-for i, stage in enumerate(complete_pipeline_stages):
-    print(f"  {i+1}. {type(stage).__name__}")
-
-# %% [markdown]
-# ## RETO BONUS 1: Experimentar con diferentes valores de k
-#
-# **Objetivo**: Encontrar el número óptimo de componentes PCA
-#
-# **Instrucciones**:
-# 1. Prueba con k = [5, 10, 15, 20]
-# 2. Para cada k, calcula la varianza acumulada
-# 3. Grafica k vs varianza explicada
-# 4. Decide cuál es el mejor k (balance entre reducción y información)
-
-# %%
-# TODO: Implementa el experimento
-# import matplotlib.pyplot as plt
-#
-# k_values = [5, 10, 15, 20]
-# explained_vars = []
-#
-# for k in k_values:
-#     pca_temp = PCA(k=min(k, num_features), inputCol="features_scaled", outputCol="temp_pca")
-#     pca_temp_model = pca_temp.fit(df_scaled)
-#     cumulative_var = sum(pca_temp_model.explainedVariance)
-#     explained_vars.append(cumulative_var)
-#     print(f"k={k}: {cumulative_var*100:.2f}% varianza explicada")
-#
-# # Graficar
-# plt.figure(figsize=(8, 5))
-# plt.plot(k_values, [v*100 for v in explained_vars], marker='o')
-# plt.xlabel('Número de Componentes (k)')
-# plt.ylabel('Varianza Explicada (%)')
-# plt.title('PCA: Varianza Explicada vs Componentes')
-# plt.grid(True)
-# plt.savefig('/opt/spark-data/processed/pca_variance.png')
-# print("Gráfico guardado en /opt/spark-data/processed/pca_variance.png")
-
-# %%
-# Seleccionar columna objetivo (label) para ML
-# Asumimos que existe una columna con el valor del contrato
-
-if "valor_del_contrato_num" in df_pca.columns:
-    df_ml_ready = df_pca.select(
+if "valor_del_contrato_num" in df_transformed.columns:
+    df_ml_ready = df_transformed.select(
         "features_pca",
         col("valor_del_contrato_num").alias("label")
     )
 else:
-    print("ADVERTENCIA: No se encontró columna de valor. Usando todas las columnas.")
-    df_ml_ready = df_pca
+    print("ADVERTENCIA: No se encontró columna de valor.")
+    df_ml_ready = df_transformed
 
-# %%
-# Guardar dataset listo para ML
 output_path = "/opt/spark-data/processed/secop_ml_ready.parquet"
 df_ml_ready.write.mode("overwrite").parquet(output_path)
+
 print(f"\n✓ Dataset ML-ready guardado en: {output_path}")
 
-# %% [markdown]
-# ## Preguntas de Reflexión
-#
-# 1. **¿Por qué StandardScaler usa withMean=False?**
-#    Respuesta:
-#
-# 2. **¿Cuándo NO deberías usar PCA?**
-#    Respuesta:
-#
-# 3. **Si tienes 100 features y aplicas PCA con k=10, ¿perdiste información?**
-#    Respuesta:
-#
-# 4. **¿Qué ventaja tiene aplicar StandardScaler ANTES de PCA?**
-#    Respuesta:
+# ============================================================
+# RESUMEN FINAL
+# ============================================================
 
-# %%
 print("\n" + "="*60)
 print("RESUMEN DE TRANSFORMACIONES")
 print("="*60)
-print(f"✓ Features normalizadas con StandardScaler")
-print(f"✓ Dimensionalidad reducida: {num_features} → {k_components}")
-print(f"✓ Varianza explicada: {sum(pca_model.explainedVariance)*100:.2f}%")
-print(f"✓ Dataset listo para entrenar modelos")
+print(f"Features originales: {num_features}")
+print(f"Features después de PCA: {k_optimal}")
+print(f"Varianza explicada total: {sum(explained_variance)*100:.2f}%")
 print("="*60)
 
-# %%
 spark.stop()
+
+
+
+##########################################################################
+#                      ANÁLISIS DE PREPROCESAMIENTO Y PCA                #
+##########################################################################
+#
+#  RETO 1: ¿POR QUÉ NORMALIZAR?
+# --------------------------------------------------------------------------
+# Observación: Existen diferencias enormes en las magnitudes de los datos.
+# - Min: 0
+# - Max: 6,349,971,000
+# - Mean: 2,432,870
+# - Std: 41,929,653
+#
+# Conclusión: Es fundamental normalizar porque los algoritmos de ML 
+# (KNN, Regresión, PCA) son sensibles a la escala. Sin esto, las variables 
+# con valores grandes dominarían el modelo y el PCA solo capturaría la 
+# varianza de las variables con mayor magnitud, sesgando los resultados.
+#
+#  RETO 2: COMPARACIÓN ANTES VS DESPUÉS (StandardScaler)
+# --------------------------------------------------------------------------
+# Los resultados confirman que el escalamiento fue exitoso:
+# - ANTES: Max ~6.35e9 | Std ~4.19e7
+# - DESPUÉS: Max 42.63 | Std 1.35
+# ✔ Las magnitudes bajaron drásticamente y la desviación quedó cercana a 1.
+#
+#  RETO 3: ¿CUÁNTOS COMPONENTES CONSERVAR?
+# --------------------------------------------------------------------------
+# Respuesta Correcta: C) Los que expliquen suficiente varianza (80%–95%).
+#
+# Justificación: PCA busca reducir la dimensionalidad conservando la mayor 
+# cantidad de información posible. No importa el número fijo, importa la 
+# varianza explicada acumulada.
+#
+# Resultados del experimento:
+# - k=5   -> 27.32% de varianza
+# - k=10  -> 46.97% de varianza
+# - k=15  -> 66.21% de varianza
+# - k=19  -> 81.59% de varianza <-- PUNTO ÓPTIMO (Supera el 80%)
+#
+#
+#  RETO 4: ¿CUÁNTOS COMPONENTES NECESITAS PARA ≥80%?
+# --------------------------------------------------------------------------
+# Respuesta: Se necesitan 20 componentes, los cuales alcanzan un 85.41% 
+# de varianza explicada acumulada.
+#
+# RETO 5: ¿POR QUÉ ES IMPORTANTE EL ORDEN DEL PIPELINE?
+# --------------------------------------------------------------------------
+# Orden correcto: 1. Feature Engineering -> 2. StandardScaler -> 3. PCA
+#
+# Justificación: El PCA se basa estrictamente en el cálculo de la varianza.
+# Si no se escala antes, las variables con magnitudes grandes dominarán 
+# los componentes principales. StandardScaler garantiza que todas las 
+# variables contribuyan de manera equitativa al modelo.
+#  Nota: Si se invierte el orden, el resultado de PCA sería incorrecto.
+#
+# PREGUNTAS DE REFLEXIÓN
+# --------------------------------------------------------------------------
+#  ¿Por qué StandardScaler usa withMean=False?
+# Debido a que las features suelen ser vectores dispersos (sparse) tras el
+# OneHotEncoder. Centrar los datos (withMean=True) los convertiría en densos,
+# disparando el consumo de memoria. Se usa por eficiencia en Spark.
+#
+#  ¿Cuándo NO deberías usar PCA?
+# - Cuando la interpretabilidad de cada variable original es crítica.
+# - Cuando el número de variables es pequeño.
+# - Cuando el modelo ya es eficiente y preciso sin reducción.
+# *PCA transforma las variables, por lo que se pierde la relación directa.
+#
+#  Si tienes 100 features y usas k=10, ¿perdiste información?
+# Sí, técnicamente hay pérdida. Sin embargo, si esos 10 componentes explican
+# entre el 90-95% de la varianza, la pérdida es mínima y aceptable a cambio
+# de una mayor eficiencia. Es una compresión inteligente.
+#
+#  ¿Qué ventaja tiene aplicar StandardScaler ANTES de PCA?
+# Garantiza que el PCA no sea sesgado. Al maximizar la varianza, el PCA 
+# ignoraría variables importantes pero con escalas pequeñas si no se
+# normalizan todas al mismo rango de peso.
+#
+##########################################################################
+##########################################################################
+
+
