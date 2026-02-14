@@ -1,0 +1,7 @@
+{
+  "regParam": 0.01,
+  "elasticNetParam": 0.0,
+  "maxIter": 50,
+  "rmse_test": 1.1947345804639324,
+  "estrategia": "Train-Validation Split"
+}
