@@ -1,0 +1,85 @@
+aliases: []
+creation_timestamp: 1771085912578
+current_stage: Production
+description: '
+
+  MODELO DE PREDICCIÓN DE CONTRATOS SECOP
+
+
+  Versión: 2.0
+
+  Fecha: 2026-02-14 16:18:34
+
+  Autor: Equipo Data Science - Universidad Santo Tomás
+
+
+  RENDIMIENTO:
+
+  - RMSE: 1.1922 (escala logarítmica)
+
+  - Dataset: SECOP II Bogotá Q1 2025
+
+  - Registros entrenamiento: 106,038
+
+  - Registros prueba: 26,603
+
+
+  HIPERPARÁMETROS:
+
+  - Algoritmo: Linear Regression
+
+  - Regularización: Ridge L2
+
+  - regParam: 0.1
+
+  - maxIter: 100
+
+
+  PREPROCESAMIENTO:
+
+  - StandardScaler aplicado
+
+  - PCA con componentes óptimos
+
+  - Transformación logarítmica del target
+
+
+  CASOS DE USO:
+
+  - Predicción de valor de contratos nuevos
+
+  - Detección de contratos con valor anómalo
+
+  - Análisis de tendencias de contratación
+
+
+  LIMITACIONES:
+
+  - Solo para contratos del Distrito Capital de Bogotá
+
+  - Datos de Q1 2025
+
+  - No incluye variables cualitativas del contrato
+
+  - Requiere recalibración cada trimestre
+
+
+  PRÓXIMOS PASOS:
+
+  - Validar en datos de Q2 2025
+
+  - Evaluar inclusión de features adicionales
+
+  - Monitorear degradación del modelo
+
+  '
+last_updated_timestamp: 1771085917690
+name: secop_prediccion_contratos
+run_id: 3323359f8216447b8a1b78caf4a11a16
+run_link: ''
+source: file:///opt/mlflow/mlruns/159519887862929486/3323359f8216447b8a1b78caf4a11a16/artifacts/model
+status: READY
+status_message: null
+storage_location: file:///opt/mlflow/mlruns/159519887862929486/3323359f8216447b8a1b78caf4a11a16/artifacts/model
+user_id: null
+version: 2

@@ -1,0 +1,2 @@
+mlflow==2.9.2
+pyspark==3.5.0

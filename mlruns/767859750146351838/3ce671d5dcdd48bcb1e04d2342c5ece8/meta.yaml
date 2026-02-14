@@ -1,0 +1,15 @@
+artifact_uri: file:///opt/mlflow/mlruns/767859750146351838/3ce671d5dcdd48bcb1e04d2342c5ece8/artifacts
+end_time: 1771085784227
+entry_point_name: ''
+experiment_id: '767859750146351838'
+lifecycle_stage: active
+run_id: 3ce671d5dcdd48bcb1e04d2342c5ece8
+run_name: elasticnet
+run_uuid: 3ce671d5dcdd48bcb1e04d2342c5ece8
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1771085763174
+status: 3
+tags: []
+user_id: root

@@ -1,0 +1,14 @@
+aliases: []
+creation_timestamp: 1771085890659
+current_stage: Archived
+description: ''
+last_updated_timestamp: 1771085914321
+name: secop_prediccion_contratos
+run_id: 3026980ac01049228b7ec58a5f3e6d75
+run_link: ''
+source: file:///opt/mlflow/mlruns/159519887862929486/3026980ac01049228b7ec58a5f3e6d75/artifacts/model
+status: READY
+status_message: null
+storage_location: file:///opt/mlflow/mlruns/159519887862929486/3026980ac01049228b7ec58a5f3e6d75/artifacts/model
+user_id: null
+version: 1

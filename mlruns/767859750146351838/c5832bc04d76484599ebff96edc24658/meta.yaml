@@ -1,0 +1,15 @@
+artifact_uri: file:///opt/mlflow/mlruns/767859750146351838/c5832bc04d76484599ebff96edc24658/artifacts
+end_time: 1771085738977
+entry_point_name: ''
+experiment_id: '767859750146351838'
+lifecycle_stage: active
+run_id: c5832bc04d76484599ebff96edc24658
+run_name: ridge_l2
+run_uuid: c5832bc04d76484599ebff96edc24658
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1771085716114
+status: 3
+tags: []
+user_id: root

@@ -1,0 +1,27 @@
+
+REPORTE DE MODELO
+==================
+
+DATASET:
+- Train: 106,038 registros
+- Test: 26,603 registros
+
+HIPERPARÁMETROS:
+- regParam: 0.1
+- elasticNetParam: 0.0
+- maxIter: 100
+- Tipo: Ridge (L2)
+
+MÉTRICAS DE RENDIMIENTO:
+- RMSE: 1.1922
+- MAE: 0.6302
+- R²: 0.1746
+
+INTERPRETACIÓN:
+- El modelo explica 17.46% de la varianza
+- Error promedio absoluto: 0.6302 (escala log)
+- Regularización L2 previene overfitting
+
+CONCLUSIÓN:
+Modelo estable con generalización adecuada.
+Listo para producción tras validación adicional.
