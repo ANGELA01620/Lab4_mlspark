@@ -29,12 +29,13 @@ wheels/
 
 # Data files
 data/raw/*.csv
-data/raw/*.parquet
-data/processed/
+#data/raw/*.parquet
+data/raw/*.json
+# data/processed/
 *.log
 
 # MLflow
-mlruns/
+# mlruns/
 mlartifacts/
 
 # Spark
